@@ -164,7 +164,7 @@
     <div class="header-sub">Todos tus entrenos guardados</div>
   </div>
   <div class="history-body">
-    <button class="btn-load" onclick="loadHistory()">🔄 Cargar desde Google Sheets</button>
+    <button class="btn-load" onclick="loadHistory()">🔄 Ver historial</button>
     <div class="filter-row" id="filter-row" style="display:none"></div>
     <div id="history-list"><div class="empty-state">Carga tu historial para verlo aquí</div></div>
   </div>
@@ -372,6 +372,22 @@
     document.getElementById('sets-' + ei).innerHTML = renderSets(ei, workoutSets[selectedDay][ei]);
   }
 
+  // SAVE TO LOCALSTORAGE
+  function saveToLocal(date, dayName, exercises) {
+    try {
+      const saved = localStorage.getItem('workout_history');
+      const rows = saved ? JSON.parse(saved) : [];
+      exercises.forEach(ex => {
+        ex.sets.forEach((set, i) => {
+          rows.push([date, dayName, ex.name, i + 1, set.weight, set.reps]);
+        });
+      });
+      localStorage.setItem('workout_history', JSON.stringify(rows));
+    } catch(e) {
+      console.error('Error saving to localStorage:', e);
+    }
+  }
+
   // SAVE TO SHEETS
   async function saveWorkout() {
     if (selectedDay === null) return;
@@ -398,6 +414,9 @@
       return;
     }
 
+    // Save to localStorage first (works offline too)
+    saveToLocal(getTodayISO(), 'Día ' + (selectedDay + 1) + ' — ' + day.name, exercises);
+
     try {
       await fetch(SHEETS_URL, {
         method: 'POST', mode: 'no-cors',
@@ -421,18 +440,23 @@
   }
 
   // LOAD HISTORY
-  async function loadHistory() {
+  function loadHistory() {
     const listEl = document.getElementById('history-list');
-    listEl.innerHTML = '<div class="empty-state"><span class="spinner"></span> Cargando...</div>';
     try {
-      const res = await fetch(SHEETS_URL + '?type=workout_history');
-      const data = await res.json();
-      historyData = data.data || [];
-      renderHistory();
-      renderFilterRow();
-      populateExSelect();
+      const saved = localStorage.getItem('workout_history');
+      if (saved) {
+        const rows = JSON.parse(saved);
+        // Convert to same format as sheets [date, dayName, exercise, set, weight, reps]
+        historyData = [['Fecha','Día','Ejercicio','Serie','Peso(kg)','Reps'], ...rows];
+        renderHistory();
+        renderFilterRow();
+        populateExSelect();
+        listEl && (listEl.style.display = '');
+      } else {
+        document.getElementById('history-list').innerHTML = '<div class="empty-state">Aún no hay entrenos guardados. ¡Completa tu primer entreno!</div>';
+      }
     } catch(e) {
-      listEl.innerHTML = '<div class="empty-state">Error cargando — revisa tu conexión</div>';
+      document.getElementById('history-list').innerHTML = '<div class="empty-state">Error cargando historial</div>';
     }
   }
 
